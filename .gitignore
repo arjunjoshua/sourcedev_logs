@@ -1,3 +1,7 @@
+.idea/
+
 /backend/build_log_examples/
 
 backend/venv/
+
+backend/__pycache__/
