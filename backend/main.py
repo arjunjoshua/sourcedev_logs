@@ -5,7 +5,7 @@ from api.logs import router
 import uvicorn
 
 cors_origins = [
-    "http://localhost:3000",
+    "http://localhost:5173",
 ]
 
 app = fastapi.FastAPI(
