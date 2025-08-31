@@ -45,6 +45,9 @@ function setActiveTab(index: number) {
 }
 
 function fetchLogPage() {
+  // ensure page number is within valid range to prevent a bad request
+  if (page_number.value < 1) page_number.value = 1;
+
   // fetch the content of the selected log file from the backend
   let url = api_base_url + `/logs?file_name=${selected_log_name.value}&&page_number=${page_number.value}`;
   logs_loading.value = true;
