@@ -9,10 +9,15 @@ import {
 } from "@heroicons/vue/20/solid";
 import {MagnifyingGlassIcon} from "@heroicons/vue/24/outline";
 
+// helper functions
+import highlight from "../utils/highlight_occurrences.ts";
+import scrollToLine from "../utils/scroll_to_line.ts";
+
 const api_base_url = "http://localhost:5000/api";
 
 const tabs = ref<{ name: string; href: string; current: boolean }[]>([]);
 
+// log state variables
 const current_log_file = ref<string[]>([]);
 const page_number = ref(1);
 const is_search_active = ref(false);
@@ -28,98 +33,16 @@ const occurrences = ref<number[]>([]);
 let current_occurrence_index = -1;
 
 
-// Function to perform search within the current log file
-function performSearch() {
-  if (searchQuery.value.trim() === "") {
-    // If the search query is empty, refetch the current page to reset the view
-    fetchLogPage();
-    return;
-  }
-  logs_loading.value = true;
-  let url = api_base_url + `/logs/search?file_name=${selected_log_name.value}&&query_str=${encodeURIComponent(searchQuery.value)}`;
-  fetch(url)
-      .then(response => response.json())
-      .then(data => {
-        current_log_file.value = data.first_match_page.lines;
-        page_number.value = data.first_match_page_number;
-        occurrences.value = data.occurrences;
-      })
-      .catch(error => {
-        console.error("Error performing search:", error);
-        current_log_file.value = [`${searchQuery.value} not found in the log.`];
-      })
-      .finally(() => {
-        logs_loading.value = false;
 
-        // Scroll to the first occurrence if found
-        // timeout to ensure DOM is updated
-        setTimeout(() => {
-          if (!occurrences) return;
-          current_occurrence_index = 0;
-          jump_to_next_occurrence();
-        }, 100);
-      });
+function setActiveTab(index: number) {
+  selected_log_index.value = index;
+  selected_log_name.value = tabs.value[index].name;
 
-  is_search_active.value = true; // Hide pagination during search
-}
+  // Reset search state
+  reset_search();
 
-function jump_to_next_occurrence() {
-  let line_number = occurrences.value[current_occurrence_index];
-
-  const element = document.getElementById(`line-${line_number % page_size}`);
-  if (element) {
-    element.scrollIntoView({behavior: 'smooth', block: 'center'});
-  }
-}
-
-function handle_next_occurrence() {
-  if (occurrences.value.length === 0) return;
-
-  current_occurrence_index++;
-  if (current_occurrence_index >= occurrences.value.length) {
-    let url = api_base_url + `/logs/search_next?file_name=${selected_log_name.value}&&query_str=${encodeURIComponent(searchQuery.value)}&&page_number=${page_number.value + 1}`;
-    logs_loading.value = true;
-    fetch(url)
-        .then(response => response.json())
-        .then(data => {
-            current_log_file.value = data.first_match_page.lines;
-            page_number.value = data.first_match_page_number;
-            occurrences.value = data.occurrences;
-            current_occurrence_index = 0;
-
-            // Scroll to the first occurrence on the new page
-            setTimeout(() => {
-              jump_to_next_occurrence();
-            }, 100);
-        })
-        .catch(error => {
-          console.error("Error fetching next search page:", error);
-          current_log_file.value = ["Error fetching next search page."];
-        })
-        .finally(() => {
-          logs_loading.value = false;
-
-          // Scroll to the first occurrence if found
-          // timeout to ensure DOM is updated
-          setTimeout(() => {
-            if (!occurrences) return;
-            current_occurrence_index = 0;
-            jump_to_next_occurrence();
-          }, 100);
-        });
-  }
-
-  jump_to_next_occurrence()
-}
-
-function reset_search() {
-  searchQuery.value = "";
-  occurrences.value = [];
-  current_occurrence_index = -1;
-  is_search_active.value = false;
   fetchLogPage();
 }
-
 
 function fetchLogPage() {
   // fetch the content of the selected log file from the backend
@@ -141,21 +64,77 @@ function fetchLogPage() {
   is_search_active.value = false;
 }
 
-function setActiveTab(index: number) {
-  selected_log_index.value = index;
-  selected_log_name.value = tabs.value[index].name;
 
-  // Reset search state
-  reset_search();
+// Function to perform search within the current log file
+function performSearch() {
+  logs_loading.value = true;
+  handle_next_occurrence(true);  // run initial search
+}
 
+// Function to reset search state
+function reset_search() {
+  searchQuery.value = "";
+  occurrences.value = [];
+  current_occurrence_index = -1;
+  is_search_active.value = false;
   fetchLogPage();
 }
 
-function highlight(line: string) {
-  if (!searchQuery.value) return line;
-  const regex = new RegExp(`(${searchQuery.value})`, 'gi');
-  return line.replace(regex, '<mark class="bg-yellow-200 text-black">$1</mark>')
+// Function to handle finding the next occurrence of the search query
+// if initial is true, it fetches the first page of results
+function handle_next_occurrence(initial = false) {
+  if (searchQuery.value.trim() === "") {
+    fetchLogPage();
+    return;
+  }
+
+  if (initial) {
+    page_number.value = 0;
+    current_occurrence_index = -1;
+    occurrences.value = [];
+  }
+
+  current_occurrence_index++;
+
+  // check whether to fetch next page
+  if (current_occurrence_index >= occurrences.value.length) {
+    let url = api_base_url + `/logs/search?file_name=${selected_log_name.value}&&query_str=${encodeURIComponent(searchQuery.value)}&&page_number=${page_number.value + 1}`;
+    logs_loading.value = true;
+    fetch(url)
+      .then(response => response.json())
+      .then(data => {
+        current_log_file.value = data.first_match_page.lines;
+        page_number.value = data.first_match_page_number;
+        occurrences.value = data.occurrences;
+
+        current_occurrence_index = 0;
+        setTimeout(() => jump_to_next_occurrence(), 200);
+      })
+      .catch(error => {
+        console.error("Error fetching search results:", error);
+        if (initial)
+          current_log_file.value = [`${searchQuery.value} not found in the log.`];
+        else {
+          current_occurrence_index--;
+          alert("No more occurrences found.");
+        }
+      })
+      .finally(() => {
+        logs_loading.value = false;
+      });
+  } else {
+    jump_to_next_occurrence();
+  }
+
+  is_search_active.value = true;
 }
+
+// auto-scroll to the next occurrence in the log
+function jump_to_next_occurrence() {
+  let line_number = occurrences.value[current_occurrence_index];
+  scrollToLine(line_number, page_size);
+}
+
 
 onBeforeMount(() => {
   // fetch the list of logs from the backend
@@ -175,7 +154,7 @@ onBeforeMount(() => {
 
 <template>
 
-  <!-- Logo at the top -->
+  <!-- source.dev logo at the top -->
   <div class="flex justify-center mb-4">
     <img src="/source_logo.webp" alt="Source Logo" class="h-8 lg:h-16 w-auto"/>
   </div>
@@ -218,6 +197,7 @@ onBeforeMount(() => {
     </div>
   </div>
 
+  <!-- Fallback error message when no logs are available -->
   <div v-else class="flex justify-center items-center h-32">
     <p class="text-gray-500 dark:text-gray-400">No log files available.</p>
   </div>
@@ -289,21 +269,25 @@ onBeforeMount(() => {
                   @keyup.enter="performSearch()"
                   class="rounded-sm border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
               />
+
+              <!-- Search button -->
               <button
                   @click="performSearch()"
                   class="ml-2 rounded-sm bg-indigo-500 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
               >
-                <MagnifyingGlassIcon class="inline h-4.5 w-4.5"/>
+                <MagnifyingGlassIcon class="hidden sm:inline h-4.5 w-4.5"/>
                 Search
               </button>
 
+              <!-- Next occurrence button -->
               <button
                   v-if="is_search_active"
-                  @click="handle_next_occurrence"
+                  @click="handle_next_occurrence(false)"
                   class="ml-2 rounded-sm bg-indigo-500 px-3 py-2 text-sm font-medium
                    text-white hover:bg-indigo-700"
               >
-                Next Occurrence
+                <span class="hidden sm:inline">Next Occurrence</span>
+                <span class="sm:hidden">Next</span>
               </button>
             </div>
           </div>
@@ -328,7 +312,7 @@ onBeforeMount(() => {
               <template v-else-if="is_search_active">
                 <span v-for="(line, index) in current_log_file" :key="index"
                       :id="'line-' + index"
-                      v-html="highlight(line) + '<br>'"/>
+                      v-html="highlight(line, searchQuery) + '<br>'"/>
               </template>
 
               <template v-else>
@@ -344,6 +328,8 @@ onBeforeMount(() => {
 </template>
 
 <style>
+
+/* this preserves whitespace in the log content on mobile*/
 @media (max-width: 640px) {
   pre {
     white-space: pre-line;

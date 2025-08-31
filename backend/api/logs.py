@@ -75,56 +75,9 @@ def get_log_page(file_name: str, limit: int = 100, return_only_lines: bool = Fal
 
 
 @router.get("/logs/search")
-def search_logs(file_name: str, query_str: str, page_size: int = 100):
-    """
-    Initial search — return total matches + the first match page only.
-    """
-    if file_name not in LOG_FILES:
-        raise HTTPException(404, f"File {file_name} not found")
-
-    path = LOG_FILES[file_name]
-    total_matches = 0
-    first_match_page = None
-    matching_line_indices = []
-
-    with open(path, "r") as f:
-        first_page_index = None
-        for line_number, line in enumerate(f):
-            if query_str.lower() in line.lower():
-                if first_page_index is None:
-                    first_page_index = line_number // page_size
-                    first_page_number = first_page_index + 1
-                    first_match_page = get_log_page(
-                        file_name, page_number=first_page_number, limit=page_size
-                    )
-
-                # only store line numbers from the first match page
-                if (line_number // page_size) == first_page_index:
-                    matching_line_indices.append(line_number)
-
-                total_matches += 1
-
-                if total_matches >= max_results:
-                    break
-
-    if total_matches == 0:
-        raise HTTPException(404, f"No matches found for '{query_str}' in {file_name}")
-
-    return {
-        "file": file_name,
-        "keyword": query_str,
-        "total_matches": total_matches,
-        "first_match_page_number": first_page_number,
-        "occurrences": matching_line_indices,
-        "first_match_page": first_match_page,
-    }
-
-
-@router.get("/logs/search_next")
 def search_next(file_name: str, query_str: str, page_number:int, page_size: int = 100):
     """
-    Get the page for the Nth match (e.g. match_index=0 for first match, 1 for second, etc.)
-    Return format matches /logs/search for frontend consistency.
+    Search for a keyword in the log file. Searches from the start of the specified page number.
     """
     if file_name not in LOG_FILES:
         raise HTTPException(404, f"File {file_name} not found")
