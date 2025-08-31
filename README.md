@@ -35,6 +35,11 @@ Node.js 16+ (with npm)
     cd frontend
     npm install
 
+6. You will also need to download the log files which are too large to be included in the repository.
+    You can download them from this link: https://drive.google.com/file/d/1MRjzmMy5vVzuGYSb-_lxuCDKsh3sKLCe/view?usp=drive_link
+
+    Extract the contents to the backend/build_log_examples directory and you are good to go :)
+
 ### Running the Application
 1. Start the FastAPI backend server:
 
