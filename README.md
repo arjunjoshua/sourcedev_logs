@@ -16,36 +16,43 @@ Not that these instructions are for a Linux or MacOS environment. Windows may re
 1. Clone the repository:
    Navigate to a directory of your choice and clone the repository by using pasting the following command in the terminal
 
-    
-    git clone https://github.com/arjunjoshua/sourcedev_logs.git (https)
+     ```
+    git clone https://github.com/arjunjoshua/sourcedev_logs.git
+    ```
     
 2. Navigate to the project directory:
-
-
-    cd sourcedev_logs
-
-3. Navigate to the backend foldder and set up a virtual environment (optional but recommended):
     
+     ```
+    cd sourcedev_logs
+    ```
 
+3. Navigate to the backend folder and set up a virtual environment (optional but recommended):
+
+    ```
     cd backend
     python3 -m venv venv
+    ```
+
 
 4. Activate the virtual environment:
 
-
+     ```
     source venv/bin/activate
+    ```
 
 5. Install the required Python packages:
 
-
+     ```
     pip install -r requirements.txt
+    ```
 
 6. Navigate to the frontend directory and install the dependencies:
-    
 
+     ```
     cd ..
     cd frontend
     npm install
+    ```
 
 7. You will also need to download the log files which are too large to be included in the repository.
    
@@ -56,20 +63,22 @@ Not that these instructions are for a Linux or MacOS environment. Windows may re
 ### Running the Application
 1. Start the FastAPI backend server (running main.py will automatically start the server using Uvicorn):
 
-
-    cd ..
+    ```
+   cd ..
     cd backend
     ./main.py
+   ```
 
 2. The backend server will start at http://localhost:5000
 
 
 3. In a new terminal, navigate to the frontend directory and start the Vue.js development server:
 
-
+     ```
     cd ..
     cd frontend
     npm run dev
+    ```
 
 4. The frontend server will start at http://localhost:5173
 
