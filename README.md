@@ -58,7 +58,7 @@ Not that these instructions are for a Linux or MacOS environment. Windows may re
    
     You can download them from this link: https://drive.google.com/file/d/1MRjzmMy5vVzuGYSb-_lxuCDKsh3sKLCe/view?usp=drive_link
 
-    Extract the contents to the backend/build_log_examples directory and you are good to go :)
+    Extract the contents to the backend directory (it should create a folder named build_log_examples which contain the files) and you are good to go!
 
 ### Running the Application
 1. Start the FastAPI backend server (running main.py will automatically start the server using Uvicorn):
