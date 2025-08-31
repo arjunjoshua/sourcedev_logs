@@ -4,7 +4,6 @@ from fastapi import HTTPException, APIRouter
 from typing import Dict, List
 import os
 
-
 router = APIRouter()
 
 # paths to log files
@@ -21,6 +20,7 @@ max_results = 100
 
 # store line-offset indices for each log file
 line_indices: Dict[str, List[int]] = {}
+
 
 def build_index(path: str) -> List[int]:
     # build byte-offset index for a log file
@@ -40,7 +40,8 @@ for log_name, log_path in LOG_FILES.items():
 
 
 @router.get("/logs")
-def get_log_page(file_name: str, limit: int = 100, return_only_lines: bool = False, page_number: int = None, offset: int = 0):
+def get_log_page(file_name: str, limit: int = 100, return_only_lines: bool = False, page_number: int = None,
+                 offset: int = 0):
     """Return a page of log lines from a specified log file, with pagination support."""
     if file_name not in LOG_FILES:
         raise HTTPException(404, f"File {file_name} not found")
@@ -51,11 +52,9 @@ def get_log_page(file_name: str, limit: int = 100, return_only_lines: bool = Fal
     path = LOG_FILES[file_name]
     index = line_indices[file_name]
 
-    if page_number is not None:
+    if page_number is not None and offset == 0:
         # page number starts from 1 on the frontend, that's why page_number - 1
         offset = (page_number - 1) * limit
-    else:
-        offset = 0
 
     lines = []
     with open(path, "r") as f:
@@ -70,7 +69,7 @@ def get_log_page(file_name: str, limit: int = 100, return_only_lines: bool = Fal
     if return_only_lines:
         return lines
 
-    total_pages = math.ceil(len(index) - 1)//limit if limit > 0 else 1
+    total_pages = math.ceil(len(index) - 1) // limit if limit > 0 else 1
 
     return {"offset": offset, "limit": limit, "lines": lines, "total_pages": total_pages}
 
@@ -86,19 +85,25 @@ def search_logs(file_name: str, query_str: str, page_size: int = 100):
     path = LOG_FILES[file_name]
     total_matches = 0
     first_match_page = None
-    first_line = None
+    matching_line_indices = []
 
     with open(path, "r") as f:
+        first_page_index = None
         for line_number, line in enumerate(f):
             if query_str.lower() in line.lower():
-                total_matches += 1
-                if first_match_page is None:  # capture first match only
-                    first_line = line_number
-                    first_page_offset = (first_line // page_size) * page_size
-                    first_match_page = get_log_page(file_name, offset=first_page_offset, limit=page_size)
-                    first_line_in_page = first_line % page_size
+                if first_page_index is None:
+                    first_page_index = line_number // page_size
+                    first_page_number = first_page_index + 1
+                    first_match_page = get_log_page(
+                        file_name, page_number=first_page_number, limit=page_size
+                    )
 
-                # DEMO - adding a cap to avoid too many matches in large files
+                # only store line numbers from the first match page
+                if (line_number // page_size) == first_page_index:
+                    matching_line_indices.append(line_number)
+
+                total_matches += 1
+
                 if total_matches >= max_results:
                     break
 
@@ -109,43 +114,61 @@ def search_logs(file_name: str, query_str: str, page_size: int = 100):
         "file": file_name,
         "keyword": query_str,
         "total_matches": total_matches,
-        "first_match_line": first_line,
+        "first_match_page_number": first_page_number,
+        "occurrences": matching_line_indices,
         "first_match_page": first_match_page,
-        "first_line_in_page": first_line_in_page,
     }
 
 
 @router.get("/logs/search_next")
-def search_next(file_name: str, query_str: str, match_index: int, page_size: int = 100):
+def search_next(file_name: str, query_str: str, page_number:int, page_size: int = 100):
     """
     Get the page for the Nth match (e.g. match_index=0 for first match, 1 for second, etc.)
+    Return format matches /logs/search for frontend consistency.
     """
     if file_name not in LOG_FILES:
         raise HTTPException(404, f"File {file_name} not found")
 
     path = LOG_FILES[file_name]
-    current_index = 0
-    target_line = None
+    index = line_indices[file_name]
+    total_lines = len(index) - 1
+    offset = (page_number - 1) * page_size
+    if offset >= total_lines:
+        raise HTTPException(404, f"Page {page_number} is out of range for {file_name}")
+
+    q = query_str.lower()
+    matching_line_indices = []
+    found_page_index = None
 
     with open(path, "r") as f:
-        for line_number, line in enumerate(f):
-            if query_str.lower() in line.lower():
-                if current_index == match_index:
-                    target_line = line_number
+        f.seek(index[offset])
+        for line_number in range(offset, total_lines):
+            line = f.readline()
+            if not line:
+                break
+            if q in line.lower():
+                page_index = line_number // page_size
+                if found_page_index is None:
+                    found_page_index = page_index
+                if page_index != found_page_index:
                     break
-                current_index += 1
+                matching_line_indices.append(line_number)
 
-    if target_line is None:
-        raise HTTPException(404, f"Match index {match_index} not found")
+    if found_page_index is None:
+        raise HTTPException(404, f"No more matches found for '{query_str}' in {file_name}")
 
-    page_number = (target_line // page_size) + 1
+    found_page_number = found_page_index + 1
+    first_match_page = get_log_page(file_name, limit=page_size, page_number=found_page_number)
+
+
     return {
         "file": file_name,
         "keyword": query_str,
-        "match_index": match_index,
-        "line_number": target_line,
-        "page": get_log_page(file_name, limit=page_size, page_number=page_number),
+        "first_match_page_number": found_page_number,
+        "first_match_page": first_match_page,
+        "occurrences": matching_line_indices,
     }
+
 
 
 @router.get("/logs/list_files")
